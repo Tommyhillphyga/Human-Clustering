@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crowd Clustering Detection Dashboard</title>
+    <link rel="stylesheet" href="/static/dashboard.css">
+</head>
+<body>
+    <div class="page-shell">
+        <header class="hero">
+            <div class="hero-copy">
+                <p class="eyebrow">Production-Grade Surveillance Analytics</p>
+                <h1>Crowd Clustering Detection Dashboard</h1>
+                <p class="hero-text">
+                    Upload a video stream, track people frame-by-frame, surface stationary clustered groups, ignore walking flows,
+                    and export a fully annotated MP4 with live telemetry.
+                </p>
+            </div>
+            <div class="hero-status">
+                <span class="status-label">System</span>
+                <strong id="statusBadge" class="status-badge idle">Idle</strong>
+                <p id="statusText">Waiting for a video job.</p>
+            </div>
+        </header>
+
+        <main class="dashboard-grid">
+            <section class="card upload-panel">
+                <div class="section-heading">
+                    <h2>Video Input</h2>
+                    <span class="section-chip">Formats: {{ ", ".join(supported_formats) }}</span>
+                </div>
+
+                <form id="uploadForm" class="upload-form">
+                    <label class="field field-file">
+                        <span>Video File</span>
+                        <input id="videoInput" type="file" name="video" accept=".mp4,.avi,.mov" required>
+                    </label>
+
+                    <div class="field-grid">
+                        <label class="field">
+                            <span>YOLO Model</span>
+                            <input type="text" name="model_name" value="{{ defaults.model_name }}">
+                        </label>
+                        <label class="field">
+                            <span>Device</span>
+                            <input type="text" name="device" value="{{ defaults.device or '' }}" placeholder="cpu, cuda:0, or leave blank">
+                        </label>
+                        <label class="field">
+                            <span>Confidence</span>
+                            <input type="number" step="0.01" min="0.05" max="0.95" name="conf_thresh" value="{{ defaults.conf_thresh }}">
+                        </label>
+                        <label class="field">
+                            <span>IOU Threshold</span>
+                            <input type="number" step="0.01" min="0.05" max="0.95" name="iou_thresh" value="{{ defaults.iou_thresh }}">
+                        </label>
+                        <label class="field">
+                            <span>Image Size</span>
+                            <input type="number" step="32" min="320" max="1280" name="imgsz" value="{{ defaults.imgsz }}">
+                        </label>
+                        <label class="field">
+                            <span>Stationary Time (s)</span>
+                            <input type="number" step="0.5" min="2" max="20" name="stationarity_seconds" value="{{ defaults.stationarity_seconds }}">
+                        </label>
+                        <label class="field">
+                            <span>Stationary Radius</span>
+                            <input type="number" step="1" min="20" max="250" name="stationarity_radius" value="{{ defaults.stationarity_radius }}">
+                        </label>
+                        <label class="field">
+                            <span>Cluster Radius</span>
+                            <input type="number" step="1" min="30" max="350" name="cluster_eps" value="{{ defaults.cluster_eps }}">
+                        </label>
+                        <label class="field">
+                            <span>Minimum Cluster Size</span>
+                            <input type="number" step="1" min="3" max="10" name="min_cluster_size" value="{{ defaults.min_cluster_size }}">
+                        </label>
+                        <label class="field">
+                            <span>History Window (s)</span>
+                            <input type="number" step="1" min="4" max="30" name="history_seconds" value="{{ defaults.history_seconds }}">
+                        </label>
+                        <label class="field">
+                            <span>Perspective Ref Height</span>
+                            <input type="number" step="1" min="60" max="320" name="perspective_height_reference" value="{{ defaults.perspective_height_reference }}">
+                        </label>
+                        <label class="field">
+                            <span>Perspective Gain</span>
+                            <input type="number" step="0.05" min="0" max="2" name="perspective_gain" value="{{ defaults.perspective_gain }}">
+                        </label>
+                        <label class="field">
+                            <span>Trail Length</span>
+                            <input type="number" step="1" min="4" max="80" name="trail_length" value="{{ defaults.trail_length }}">
+                        </label>
+                        <label class="field">
+                            <span>Track Buffer</span>
+                            <input type="number" step="1" min="10" max="180" name="track_buffer" value="{{ defaults.track_buffer }}">
+                        </label>
+                        <label class="field">
+                            <span>Track High Threshold</span>
+                            <input type="number" step="0.01" min="0.05" max="0.95" name="track_high_thresh" value="{{ defaults.track_high_thresh }}">
+                        </label>
+                        <label class="field">
+                            <span>Track Low Threshold</span>
+                            <input type="number" step="0.01" min="0.01" max="0.90" name="track_low_thresh" value="{{ defaults.track_low_thresh }}">
+                        </label>
+                        <label class="field">
+                            <span>New Track Threshold</span>
+                            <input type="number" step="0.01" min="0.05" max="0.95" name="new_track_thresh" value="{{ defaults.new_track_thresh }}">
+                        </label>
+                        <label class="field">
+                            <span>Track Match Threshold</span>
+                            <input type="number" step="0.01" min="0.10" max="0.99" name="match_thresh" value="{{ defaults.match_thresh }}">
+                        </label>
+                    </div>
+
+                    <div class="button-row">
+                        <button id="submitButton" class="button primary" type="submit">Start Analysis</button>
+                        <button id="pauseButton" class="button secondary" type="button" disabled>Pause</button>
+                        <button id="resumeButton" class="button secondary" type="button" disabled>Resume</button>
+                        <button id="downloadButton" class="button ghost" type="button" disabled>Download MP4</button>
+                    </div>
+                </form>
+            </section>
+
+            <section class="card video-panel">
+                <div class="section-heading">
+                    <h2>Live Processed Feed</h2>
+                    <span class="section-chip" id="jobName">No active job</span>
+                </div>
+
+                <div class="video-stage">
+                    <img id="videoStream" alt="Processed crowd surveillance stream">
+                    <div id="videoPlaceholder" class="video-placeholder">
+                        <p>Processed frames appear here with tracking IDs, cluster overlays, and analytics text.</p>
+                    </div>
+                </div>
+
+                <div class="legend">
+                    <div class="legend-item"><span class="legend-swatch green"></span> Moving individuals</div>
+                    <div class="legend-item"><span class="legend-swatch amber"></span> Stationary individuals</div>
+                    <div class="legend-item"><span class="legend-swatch red"></span> Clustered group region</div>
+                </div>
+            </section>
+
+            <aside class="analytics-stack">
+                <section class="card metrics-panel">
+                    <div class="section-heading">
+                        <h2>Real-Time Analytics</h2>
+                        <span class="section-chip">Live</span>
+                    </div>
+
+                    <div class="metrics-grid">
+                        <article class="metric-card">
+                            <span class="metric-label">Person Count</span>
+                            <strong id="personCount">0</strong>
+                        </article>
+                        <article class="metric-card">
+                            <span class="metric-label">Cluster Count</span>
+                            <strong id="clusterCount">0</strong>
+                        </article>
+                        <article class="metric-card">
+                            <span class="metric-label">Stationary Count</span>
+                            <strong id="stationaryCount">0</strong>
+                        </article>
+                        <article class="metric-card">
+                            <span class="metric-label">Processing FPS</span>
+                            <strong id="fpsValue">0.0</strong>
+                        </article>
+                    </div>
+                </section>
+
+                <section class="card progress-panel">
+                    <div class="section-heading">
+                        <h2>Processing & Export</h2>
+                        <span id="progressText" class="section-chip">0%</span>
+                    </div>
+
+                    <div class="progress-block">
+                        <div class="progress-labels">
+                            <span>Frame Progress</span>
+                            <span id="frameProgressLabel">0 / 0</span>
+                        </div>
+                        <div class="progress-track"><div id="processingProgress" class="progress-fill"></div></div>
+                    </div>
+
+                    <div class="progress-block">
+                        <div class="progress-labels">
+                            <span>Export Progress</span>
+                            <span id="exportProgressLabel">0%</span>
+                        </div>
+                        <div class="progress-track export"><div id="exportProgress" class="progress-fill"></div></div>
+                    </div>
+                </section>
+
+                <section class="card chart-panel">
+                    <div class="section-heading">
+                        <h2>Analytics Trend</h2>
+                        <span class="section-chip">Recent Frames</span>
+                    </div>
+                    <canvas id="trendChart" width="420" height="220"></canvas>
+                </section>
+
+                <section class="card cluster-panel">
+                    <div class="section-heading">
+                        <h2>Active Clusters</h2>
+                        <span class="section-chip" id="clusterMeta">None</span>
+                    </div>
+                    <div id="clusterList" class="cluster-list">
+                        <p class="empty-note">Stationary groups will appear here once they satisfy the clustering rules.</p>
+                    </div>
+                </section>
+            </aside>
+        </main>
+    </div>
+
+    <script src="/static/dashboard.js" defer></script>
+</body>
+</html>
