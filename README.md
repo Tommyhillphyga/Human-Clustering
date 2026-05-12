@@ -70,4 +70,4 @@ The core clustering heuristics are covered by tests:
 PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 pytest -q tests/test_cluster_logic.py
 ```
 
-That flag is included to avoid unrelated globally installed pytest plugins interfering with the local test run.
+
