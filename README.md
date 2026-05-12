@@ -23,23 +23,7 @@ A group is counted as a cluster only when:
 - The group is stationary rather than walking together
 - Perspective normalization is applied so far-away motion is not underestimated
 
-## Application Structure
 
-```text
-app/
-  main.py                  FastAPI app and HTTP endpoints
-  schemas.py               Processing and metrics data models
-  config.py                Runtime paths and defaults
-  services/
-    cluster_logic.py       Stationary detection and DBSCAN clustering
-    jobs.py                Background job manager and live state
-    video_processor.py     YOLO + ByteTrack + annotation pipeline
-  static/                  Dashboard CSS and JavaScript
-  templates/               Dashboard HTML
-tests/
-  test_cluster_logic.py    Core clustering heuristic tests
-notebook/
-  people_clustering_algorithm3.ipynb
 ```
 
 ## Install
